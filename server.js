@@ -114,16 +114,31 @@ app.get('/api/invoice', async (req, res) => {
       const dateStr = row.FRDerInvDate ? row.FRDerInvDate.split(' ')[0] : null;
       const amount = parseFloat(row.DomAmount) || 0;
       if (!dateStr || amount === 0) return;
+      
       let type;
-      const acct = String(row.Acct || '').trim();
-      if (acct && (acct.includes('4954') || acct.includes('Freight'))) {
+      
+      
+        
+      
+      const desc = (row.FRDerDescription || '').toLowerCase();
+      if (desc.includes('freight')) {
         type = 'Freight';
-      } else if (acct && (acct.includes('4953') || acct.includes('Misc'))) {
+      } else if (desc.includes('misc')) {
         type = 'Misc';
       } else {
-        const code = row.DerItemProductCode || row.ItemProductCode;
-        type = classifyItem(code);
+        const prodCode = String(row.DerItemProductCode || row.ItemProductCode || row.NonInvItemProductCode || '').toUpperCase();
+        type = classifyItem(prodCode);
       }
+      // Original classification commented out below
+const acct = String(row.Acct || '').trim();
+      if//  (acct && (acct.includes('4954') || acct.includes('Freight'))) {
+        // type = 'Freight';
+      } // else if (acct && (acct.includes('4953') || acct.includes('Misc'))) {
+        // type = 'Misc';
+      } // else {
+       /// /  const code = row.DerItemProductCode || row.ItemProductCode;
+        // type = classifyItem(code);
+    //   }
       if (!resultMap[dateStr]) resultMap[dateStr] = {};
       if (!resultMap[dateStr][type]) resultMap[dateStr][type] = 0;
       resultMap[dateStr][type] += amount;
