@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales by Order/Ship Date</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 10px;
+      background: #f7f9fc;
+      color: #333;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    /* Layout container splits the screen into a grid similar to the example */
+    #dashboard {
+      display: grid;
+      grid-template-columns: 3fr 2fr 1fr;
+      grid-template-rows: auto auto 1fr;
+      grid-gap: 10px;
+      height: calc(100vh - 50px);
+    }
+    .panel {
+      background: #fff;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      padding: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .panel h2 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 4px;
+    }
+    .scroll {
+      overflow-y: auto;
+      flex: 1;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+    th, td {
+      padding: 4px;
+      border: 1px solid #eee;
+      text-align: left;
+    }
+    th {
+      background: #f0f7ff;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .summary-table th, .summary-table td {
+      border: none;
+      padding: 2px 4px;
+    }
+    .summary-table td {
+      text-align: right;
+    }
+    #chartSection {
+      height: 250px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sales Breakdown – Order Date</h1>
+  <div id="dashboard">
+    <div class="panel" id="dailyPanel" style="grid-column: 1 / 2; grid-row: 1 / 3;">
+      <h2>Previous Daily Sales (Order)</h2>
+      <div class="scroll">
+        <table id="dailyTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Product</th>
+              <th>Service</th>
+              <th>Misc</th>
+              <th>Freight</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel" id="mtdPanel" style="grid-column: 2 / 3; grid-row: 1 / 2;">
+      <h2>MTD View with Summary and Daily Average</h2>
+      <div class="scroll">
+        <table id="mtdTable" class="summary-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Product</th>
+              <th>Service</th>
+              <th>Misc</th>
+              <th>Freight</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel" id="todayPanel" style="grid-column: 3 / 4; grid-row: 1 / 2;">
+      <h2>Today</h2>
+      <table id="todayTable" class="summary-table">
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel" id="mtdSummaryPanel" style="grid-column: 3 / 4; grid-row: 2 / 3;">
+      <h2>MTD Sales</h2>
+      <table id="mtdSummaryTable" class="summary-table">
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel" id="ytdSummaryPanel" style="grid-column: 3 / 4; grid-row: 3 / 4;">
+      <h2>YTD Sales</h2>
+      <table id="ytdSummaryTable" class="summary-table">
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel" id="chartPanel" style="grid-column: 1 / 3; grid-row: 3 / 4;">
+      <h2>Previous 24 Months – Product vs Service</h2>
+      <canvas id="chartSection"></canvas>
+    </div>
+  </div>
+
+  <!-- Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    async function loadData() {
+      const res = await fetch('/api/order');
+      if (!res.ok) throw new Error('Request failed');
+      return await res.json();
+    }
+
+    function groupBy(data, keyFn) {
+      const map = {};
+      data.forEach(item => {
+        const key = keyFn(item);
+        if (!map[key]) map[key] = [];
+        map[key].push(item);
+      });
+      return map;
+    }
+
+    function sumByCategory(rows) {
+      const totals = { Product: 0, Service: 0, Misc: 0, Freight: 0 };
+      rows.forEach(r => {
+        totals[r.type] = (totals[r.type] || 0) + r.amount;
+      });
+      totals.Total = totals.Product + totals.Service + totals.Misc + totals.Freight;
+      return totals;
+    }
+
+    function formatCurrency(v) {
+      return v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function populateDailyTable(data) {
+      const tbody = document.querySelector('#dailyTable tbody');
+      tbody.innerHTML = '';
+      // Sort descending by date
+      const grouped = groupBy(data, d => d.date);
+      const dates = Object.keys(grouped).sort((a,b) => b.localeCompare(a));
+      dates.forEach(date => {
+        const totals = sumByCategory(grouped[date]);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${date}</td><td>${formatCurrency(totals.Product)}</td><td>${formatCurrency(totals.Service)}</td><td>${formatCurrency(totals.Misc)}</td><td>${formatCurrency(totals.Freight)}</td><td>${formatCurrency(totals.Total)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function populateTodayTable(data) {
+      const today = new Date().toISOString().split('T')[0];
+      const rows = data.filter(r => r.date === today);
+      const totals = sumByCategory(rows);
+      const tbody = document.querySelector('#todayTable tbody');
+      tbody.innerHTML = '';
+      ['Product','Service','Misc','Freight','Total'].forEach(type => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${type} Rev</td><td>${formatCurrency(totals[type] || 0)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function populateSummaryTable(data, tableId, periodFn, label) {
+      const periodRows = data.filter(periodFn);
+      const totals = sumByCategory(periodRows);
+      const tbody = document.querySelector(`#${tableId} tbody`);
+      tbody.innerHTML = '';
+      ['Product','Service','Misc','Freight','Total'].forEach(type => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${type} Rev</td><td>${formatCurrency(totals[type] || 0)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function populateMtdTable(data) {
+      // current month (YYYY-MM)
+      const now = new Date();
+      const ym = now.toISOString().slice(0,7);
+      const mtdRows = data.filter(r => r.date.startsWith(ym));
+      const grouped = groupBy(mtdRows, d => d.date);
+      const dates = Object.keys(grouped).sort((a,b) => b.localeCompare(a));
+      const tbody = document.querySelector('#mtdTable tbody');
+      tbody.innerHTML = '';
+      // Yearly daily average and monthly daily average
+      // Year to date filter
+      const yearPrefix = now.toISOString().slice(0,4);
+      const ytdRows = data.filter(r => r.date.startsWith(yearPrefix));
+      const yearTotals = sumByCategory(ytdRows);
+      const dayOfYear = Math.floor((now - new Date(now.getFullYear(),0,0)) / 86400000);
+      const yearDailyAvg = {
+        Product: yearTotals.Product / dayOfYear,
+        Service: yearTotals.Service / dayOfYear,
+        Misc: yearTotals.Misc / dayOfYear,
+        Freight: yearTotals.Freight / dayOfYear,
+        Total: yearTotals.Total / dayOfYear,
+      };
+      const mtdTotals = sumByCategory(mtdRows);
+      const mtdDay = now.getDate();
+      const monthDailyAvg = {
+        Product: mtdTotals.Product / mtdDay,
+        Service: mtdTotals.Service / mtdDay,
+        Misc: mtdTotals.Misc / mtdDay,
+        Freight: mtdTotals.Freight / mtdDay,
+        Total: mtdTotals.Total / mtdDay,
+      };
+      function appendRow(label, vals) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${label}</td>`+
+          `<td>${formatCurrency(vals.Product)}</td>`+
+          `<td>${formatCurrency(vals.Service)}</td>`+
+          `<td>${formatCurrency(vals.Misc)}</td>`+
+          `<td>${formatCurrency(vals.Freight)}</td>`+
+          `<td>${formatCurrency(vals.Total)}</td>`;
+        tbody.appendChild(tr);
+      }
+      // yearly daily avg row
+      appendRow('Yearly Daily Average', yearDailyAvg);
+      appendRow('Monthly Daily Average', monthDailyAvg);
+      appendRow('Monthly Summary', mtdTotals);
+      dates.forEach(date => {
+        const totals = sumByCategory(grouped[date]);
+        appendRow(date, totals);
+      });
+    }
+
+    function drawMonthlyChart(data) {
+      // compute monthly totals for last 24 months
+      const buckets = {};
+      data.forEach(r => {
+        const ym = r.date.slice(0,7);
+        if (!buckets[ym]) buckets[ym] = { Product: 0, Service: 0 };
+        if (r.type === 'Product' || r.type === 'Service') {
+          buckets[ym][r.type] += r.amount;
+        }
+      });
+      const months = Object.keys(buckets).sort().slice(-24);
+      const productData = months.map(m => buckets[m].Product || 0);
+      const serviceData = months.map(m => buckets[m].Service || 0);
+      const ctx = document.getElementById('chartSection').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: months,
+          datasets: [
+            { label: 'Product Revenue', data: productData, backgroundColor: 'rgba(54,162,235,0.6)' },
+            { label: 'Service Revenue', data: serviceData, backgroundColor: 'rgba(255,206,86,0.6)' }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            x: { stacked: false },
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    (async function init() {
+      try {
+        const data = await loadData();
+        populateDailyTable(data);
+        populateTodayTable(data);
+        populateSummaryTable(data, 'mtdSummaryTable', r => {
+          const now = new Date().toISOString().slice(0,7);
+          return r.date.startsWith(now);
+        });
+        populateSummaryTable(data, 'ytdSummaryTable', r => {
+          const year = new Date().getFullYear().toString();
+          return r.date.startsWith(year);
+        });
+        populateMtdTable(data);
+        drawMonthlyChart(data);
+      } catch (err) {
+        console.error(err);
+        alert('Failed to load data. Please check server logs.');
+      }
+    })();
+  </script>
+</body>
+</html>
