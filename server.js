@@ -96,30 +96,25 @@ app.get('/api/order', async (req, res) => {
   }
 });
 
-// Endpoint: /api/invoice
 // Aggregates sales by invoice date using SLLedgers.
 app.get('/api/invoice', async (req, res) => {
   try {
     const props = [
       'FRDerInvDate',
       'DomAmount',
-      'Acct',
+      'FRDerDescription',
       'DerItemProductCode',
       'ItemProductCode',
-      'Type'
+      'NonInvItemProductCode'
     ];
     const ledgers = await loadCollection('SLLedgers', props);
     const resultMap = {};
     ledgers.forEach(row => {
       const dateStr = row.FRDerInvDate ? row.FRDerInvDate.split(' ')[0] : null;
-      const amount = parseFloat(row.DomAmount) || 0;
+      const amount =Math.abs(parseFloat(row.DomAmount)) || 0) || 0;
       if (!dateStr || amount === 0) return;
-      
+
       let type;
-      
-      
-        
-      
       const desc = (row.FRDerDescription || '').toLowerCase();
       if (desc.includes('freight')) {
         type = 'Freight';
@@ -129,16 +124,7 @@ app.get('/api/invoice', async (req, res) => {
         const prodCode = String(row.DerItemProductCode || row.ItemProductCode || row.NonInvItemProductCode || '').toUpperCase();
         type = classifyItem(prodCode);
       }
-      // Original classification commented out below
-const acct = String(row.Acct || '').trim();
-      if//  (acct && (acct.includes('4954') || acct.includes('Freight'))) {
-        // type = 'Freight';
-      } // else if (acct && (acct.includes('4953') || acct.includes('Misc'))) {
-        // type = 'Misc';
-      } // else {
-       /// /  const code = row.DerItemProductCode || row.ItemProductCode;
-        // type = classifyItem(code);
-    //   }
+
       if (!resultMap[dateStr]) resultMap[dateStr] = {};
       if (!resultMap[dateStr][type]) resultMap[dateStr][type] = 0;
       resultMap[dateStr][type] += amount;
