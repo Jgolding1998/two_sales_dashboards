@@ -56,7 +56,7 @@ async function loadCollection(idoName, properties = [], filter = '') {
 
 // Utility to classify product vs service based on product code. Adjust the
 // value of SERVICE_CODES to match your implementation.
-const SERVICE_CODES = new Set(['SERVICE', 'SV', 'SVR']);
+const const SERVICE_CODES = new Set(['SERVICE','SERV','SVC','SV','SVR','SERVICES','LABOR']);
 function classifyItem(productCode) {
   if (!productCode) return 'Product';
   const code = String(productCode).trim().toUpperCase();
