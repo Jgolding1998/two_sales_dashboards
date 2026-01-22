@@ -1,0 +1,14 @@
+{
+  "name": "two-sales-dashboards",
+  "version": "1.0.0",
+  "description": "Two sales dashboards for SyteLine.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.5.1",
+    "dayjs": "^1.11.9"
+  }
+}
